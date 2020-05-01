@@ -8,9 +8,9 @@
 
 using namespace std;
 
-int mA = 500;
-int nA = 500;
-int nB = 500;
+int mA = 4;
+int nA = 4;
+int nB = 4;
 vector< vector<int> > createRandomMatrix(int m, int n);
 vector< vector<int> > createEmptyMatrix(int m, int n);
 vector< vector<int> > serialMM(vector< vector<int> > A, vector< vector<int> > B, vector< vector<int> > C);
@@ -23,14 +23,6 @@ void runOneDMM(int argc, char* argv[], vector< vector<int> > A, vector< vector<i
 void runTwoDMM(int argc, char* argv[], vector< vector<int> > A, vector< vector<int> > B, vector< vector<int> > C);
 
 int main(int argc, char *argv[]) {
-    /*int mA = 10, nA = 10, B_ROW = nA, nB = 10; 
-    int option = 2;
-    if (argc > 4) {
-        mA = atoi(argv[argc - 4]);
-        nA = atoi(argv[argc - 3]);
-        nB = atoi(argv[argc - 2]);
-        option = atoi(argv[argc - 1]);
-    }*/
     vector< vector<int> > A = createRandomMatrix(mA, nA);
     vector< vector<int> > B = createRandomMatrix(nA, nB);
     vector< vector<int> > C = createEmptyMatrix(mA, nB);
@@ -47,7 +39,7 @@ void runSerialMM(int argc, char* argv[], vector< vector<int> > A, vector< vector
     // Get the number of processes
     int world_rank;
     MPI_Comm_size(MPI_COMM_WORLD, &world_rank);
-
+ 
     // Get the rank of the process
     int processor_rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &processor_rank);
@@ -71,7 +63,7 @@ vector< vector<int> > createRandomMatrix(int m, int n) {
     for (int i = 0; i < m; i++) {
         vector<int> tmp;
         for (int j = 0; j < n; j++) {
-            tmp.push_back(rand() % 10 + 1);
+            tmp.push_back(rand() % 100 + 1);
         }
         matrix.push_back(tmp);
     }
@@ -107,7 +99,7 @@ vector< vector<int> > serialMM(vector< vector<int> > A, vector< vector<int> > B,
     clock_t end = clock();
     timeSpent += (double)(end - begin) / CLOCKS_PER_SEC;
     cout << "Serial Times used is " << timeSpent << " seconds."<<endl;
-    
+    printMatrix(C);
     return C;
 }
 
@@ -143,12 +135,14 @@ void OneDMM(vector< vector<int> > A, vector< vector<int> > B, vector< vector<int
         clock_t end = clock();
         timeSpent += (double)(end - begin) / CLOCKS_PER_SEC;
         cout << "1D parallel Times used is " << timeSpent << " seconds."<<endl;
-
+	cout<<"--------------"<<endl;
+//printMatrix(C);
+	cout<<"--------------"<<endl;
     }
     else{
         MPI_Recv(&t, nA*mA, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         MPI_Recv(&t2, mA*nB, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        for(int i=0; i<A_row_chunck;i++){
+        for(int i=0; i<A_row_chunck+1;i++){
             for(int j=0;j<nB;j++){
                 int part_result = 0;
                 for (int k=0;k<mA;k++){
@@ -178,7 +172,6 @@ void runOneDMM(int argc, char* argv[], vector< vector<int> > A, vector< vector<i
     // Finalize the MPI environment.
     //MPI_Finalize();
 
-    //printMatrix(C);
 }
 
 void printMatrix(vector< vector<int> > matrix) {
@@ -224,26 +217,23 @@ void TwoDMM(vector< vector<int> > A, vector< vector<int> > B, vector< vector<int
         }
     }
     if(processor_rank == 0){
-        double timeSpent = 0.0;
-        clock_t begin = clock();
+        
         for (int i=1; i<world_rank;i++){
             MPI_Send(&t, mA*nA, MPI_INT, i, 0, MPI_COMM_WORLD);
             MPI_Send(&t2, mA*nA, MPI_INT, i, 0, MPI_COMM_WORLD);
             
         }
-        
+        double timeSpent = 0.0;
+        clock_t begin = clock();
         for(int i=1; i<world_rank;i++){
             MPI_Recv(processor_C, tmp * tmp, MPI_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             u = ((i-1) / int(sqrt(world_rank-1)));
-            jStart = u * tmp;
-            jEnd = jStart + tmp;
-            kStart = (i-1) * tmp % nB;
-            kEnd = jStart + tmp;
+            jStart = min(u * tmp, mA); 
+            jEnd = min(jStart + tmp, mA);
+            kStart = min((i-1) * tmp % nB, mA);
+            kEnd = min(jStart + tmp, mA);
             for (int j=jStart;j<jEnd;j++){
                 for(int k=kStart;k<kEnd;k++){
-                    if(i>=mA || j>=mA || k>=mA){
-                        break;
-                    }
                     C[j][k]=processor_C[j-jStart][k-kStart];
                 }
             }
@@ -251,7 +241,7 @@ void TwoDMM(vector< vector<int> > A, vector< vector<int> > B, vector< vector<int
         clock_t end = clock();
         timeSpent += (double)(end - begin) / CLOCKS_PER_SEC;
         cout << "2D parallel Times used is " << timeSpent << " seconds."<<endl;
-        //printMatrix(C);
+	//printMatrix(C);
     }
     else{
         u = floor(((processor_rank-1) / int(sqrt(world_rank-1))));
@@ -259,11 +249,6 @@ void TwoDMM(vector< vector<int> > A, vector< vector<int> > B, vector< vector<int
         jEnd = min(jStart + tmp, mA);
         kStart = min((processor_rank-1) * tmp % nB, mA);
         kEnd = min(jStart + tmp, mA);
-        /*cout<<"processor: "<<processor_rank<<endl;
-        cout<<"j: "<<jEnd<<endl;
-        cout<<"k: "<<kEnd<<endl;
-        cout<<"u: "<<u<<endl;
-        cout<<"tmp: "<<tmp<<endl;*/
         MPI_Recv(&t, nA*mA, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         MPI_Recv(&t2, mA*nB, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         
@@ -271,13 +256,7 @@ void TwoDMM(vector< vector<int> > A, vector< vector<int> > B, vector< vector<int
             for (int k = kStart; k < kEnd; k++) {
                 int sum = 0;
                 for (int i = 0; i < nB; i++) {
-                    if(i>=mA || j>=mA || k>=mA){
-                        break;
-                    }
                     sum += t[j][i] * t2[i][k];
-                }
-                if(j>=mA || k>=mA){
-                        break;
                 }
                 processor_C[j - jStart][k - kStart] = sum;
             }
@@ -300,7 +279,7 @@ void runTwoDMM(int argc, char* argv[], vector< vector<int> > A, vector< vector<i
     MPI_Comm_rank(MPI_COMM_WORLD, &processor_rank);
 
     TwoDMM(A, B, C, world_rank, processor_rank);
-    
+    //TwoDMM2(A, B, C, world_rank, processor_rank);
 
     // Finalize the MPI environment.
     MPI_Finalize();
